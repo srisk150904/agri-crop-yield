@@ -152,9 +152,13 @@ uploaded_file = st.file_uploader("Upload Landsat Patch (.npz)", type=["npz"])
 
 # --- Metadata input ---
 st.subheader("Metadata Inputs")
-area = st.number_input("Area (ha)", value=1.0, format="%.2f")
-sowing = st.number_input("Sowing date (numeric/encoded)", value=100.0)
-harvest = st.number_input("Harvest date (numeric/encoded)", value=200.0)
+
+area = st.number_input("Area (ha)", value=1.0, format="%.2f", key="area_input")
+sowing_month = st.number_input("Sowing Month (numeric/encoded)", value=100.0, key="sowing_month_input")
+harvest_month = st.number_input("Harvest Month (numeric/encoded)", value=200.0, key="harvest_month_input")
+sowing_to_transplanting_days = st.number_input(
+    "Sowing to Transplanting Days (numeric/encoded)", value=200.0, key="sowing_to_transplanting_input"
+)
 
 if uploaded_file is not None:
     with np.load(uploaded_file) as data:
