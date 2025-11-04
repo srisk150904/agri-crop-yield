@@ -208,10 +208,149 @@
 
 
 
+# import streamlit as st
+# import numpy as np
+# import joblib
+# import tensorflow as tf
+# from sklearn.preprocessing import PowerTransformer
+
+# # ======================================
+# # --- Utility functions ---
+# # ======================================
+# def preprocess_landsat_image(data, target_bands=['SR_B4', 'SR_B5', 'SR_B6', 'ST_B10', 'ST_TRAD']):
+#     """Preprocess Landsat .npz image for CNN (normalize, pad, stack 5 bands)."""
+#     img_stack = []
+#     raw_b4, raw_b5 = None, None
+#     for band in target_bands:
+#         if band in data:
+#             band_img = data[band].astype(np.float32)
+#             h, w = band_img.shape
+#             pad_h, pad_w = max(0, 12 - h), max(0, 12 - w)
+#             band_img = np.pad(band_img, ((0, pad_h), (0, pad_w)), mode='constant', constant_values=0)
+#             if band == "SR_B4": raw_b4 = band_img.copy()
+#             if band == "SR_B5": raw_b5 = band_img.copy()
+#             mean, std = np.mean(band_img), np.std(band_img)
+#             band_img = (band_img - mean) / std if std > 0 else np.zeros_like(band_img)
+#             img_stack.append(band_img)
+
+#     if len(img_stack) != len(target_bands):
+#         raise ValueError("Missing one or more Landsat bands.")
+#     img = np.stack(img_stack, axis=-1)
+#     ndvi = (raw_b5 - raw_b4) / (raw_b5 + raw_b4 + 1e-6)
+#     ndvi_mean = float(np.nanmean(ndvi))
+#     return img, ndvi_mean
+
+# def compute_sentinel_features(sentinel_data):
+#     """Compute VV_mean, VH_mean, VH_VV_ratio, and transformed ratio."""
+#     VV = sentinel_data.get("VV")
+#     VH = sentinel_data.get("VH")
+#     if VV is None or VH is None:
+#         raise ValueError("VV/VH bands missing in Sentinel data.")
+
+#     VV_mean = float(np.nanmean(VV))
+#     VH_mean = float(np.nanmean(VH))
+#     VH_VV_ratio = float(np.nanmean(VH / (VV + 1e-6)))
+
+#     pt = PowerTransformer(method="yeo-johnson", standardize=False)
+#     VH_VV_ratio_trans2 = float(pt.fit_transform([[VH_VV_ratio]])[0][0])
+#     return VV_mean, VH_mean, VH_VV_ratio, VH_VV_ratio_trans2
+
+# # ======================================
+# # --- Streamlit App ---
+# # ======================================
+# st.title("🌾 Hybrid CNN + LightGBM Crop Yield Prediction")
+# st.write("Upload **Landsat** and **Sentinel** patches along with metadata to predict yield using your trained models.")
+
+# # --- Model Uploaders ---
+# st.sidebar.header("📦 Upload Models")
+# cnn_model_file = st.sidebar.file_uploader("Upload CNN Model (.h5)", type=["h5"])
+# lgbm_model_file = st.sidebar.file_uploader("Upload LightGBM Model (.pkl)", type=["pkl", "joblib"])
+
+# # --- Input Uploads ---
+# st.subheader("🌍 Upload Input Data")
+# landsat_file = st.file_uploader("Upload Landsat Patch (.npz)", type=["npz"])
+# sentinel_file = st.file_uploader("Upload Sentinel Patch (.npz)", type=["npz"])
+
+# # --- Metadata Inputs ---
+# st.subheader("📋 Metadata Inputs")
+# area = st.number_input("Area (ha)", value=1.0, format="%.2f")
+# sow_mon = st.number_input("Sowing Month (numeric/encoded)", value=6.0)
+# har_mon = st.number_input("Harvest Month (numeric/encoded)", value=12.0)
+# sow_to_trans_days = st.number_input("Sowing to Transplanting Days", value=25.0)
+# trans_to_har_days = st.number_input("Transplanting to Harvest Days", value=100.0)
+
+# # ======================================
+# # --- Model Loading ---
+# # ======================================
+# cnn_model, lgbm_model = None, None
+# if cnn_model_file is not None:
+#     cnn_model = tf.keras.models.load_model(cnn_model_file)
+#     st.sidebar.success("✅ CNN model loaded")
+
+# if lgbm_model_file is not None:
+#     lgbm_model = joblib.load(lgbm_model_file)
+#     st.sidebar.success("✅ LightGBM model loaded")
+
+# # ======================================
+# # --- Run Prediction ---
+# # ======================================
+# if st.button("🔍 Run Prediction"):
+#     if not (landsat_file and sentinel_file and cnn_model and lgbm_model):
+#         st.error("❌ Please upload both images and both models.")
+#         st.stop()
+
+#     # --- Load and preprocess Landsat ---
+#     with np.load(landsat_file) as ldata:
+#         landsat_img, ndvi_val = preprocess_landsat_image(ldata)
+
+#     # --- CNN Feature Extraction ---
+#     img_input = np.expand_dims(landsat_img, axis=0)  # shape (1, 12, 12, 5)
+#     cnn_features = cnn_model.predict(img_input)
+#     cnn_features = cnn_features.flatten()  # 1D feature vector
+
+#     # --- Sentinel feature extraction ---
+#     with np.load(sentinel_file) as sdata:
+#         VV_mean, VH_mean, VH_VV_ratio, VH_VV_ratio_trans2 = compute_sentinel_features(sdata)
+
+#     # --- Apply transformations ---
+#     sow_to_trans_log = np.log1p(sow_to_trans_days).astype(np.float64)
+
+#     # --- Prepare final LightGBM input ---
+#     tabular_features = np.array([
+#         area, sow_mon, har_mon, sow_to_trans_log, trans_to_har_days,
+#         VV_mean, VH_mean, VH_VV_ratio, VH_VV_ratio_trans2, ndvi_val
+#     ])
+#     full_input = np.concatenate([tabular_features, cnn_features])
+#     full_input = full_input.reshape(1, -1)
+
+#     # --- Predict yield ---
+#     yield_pred_log = float(lgbm_model.predict(full_input)[0])
+#     yield_pred = np.expm1(yield_pred_log)
+
+#     # --- Display results ---
+#     st.success(f"**Predicted Yield:** {yield_pred:.2f} kg/ha 🌾")
+#     st.write("### 📊 Feature Summary")
+#     st.dataframe({
+#         "AREA": [area],
+#         "sow_mon": [sow_mon],
+#         "har_mon": [har_mon],
+#         "sow_to_trans_days (log1p)": [sow_to_trans_log],
+#         "trans_to_har_days": [trans_to_har_days],
+#         "VV_mean": [VV_mean],
+#         "VH_mean": [VH_mean],
+#         "VH_VV_ratio": [VH_VV_ratio],
+#         "VH_VV_ratio_trans2": [VH_VV_ratio_trans2],
+#         "NDVI": [ndvi_val],
+#         "CNN_features_dim": [cnn_features.shape[0]]
+#     })
+
+
+
 import streamlit as st
 import numpy as np
 import joblib
 import tensorflow as tf
+import tempfile
 from sklearn.preprocessing import PowerTransformer
 
 # ======================================
@@ -221,24 +360,36 @@ def preprocess_landsat_image(data, target_bands=['SR_B4', 'SR_B5', 'SR_B6', 'ST_
     """Preprocess Landsat .npz image for CNN (normalize, pad, stack 5 bands)."""
     img_stack = []
     raw_b4, raw_b5 = None, None
+
     for band in target_bands:
         if band in data:
             band_img = data[band].astype(np.float32)
             h, w = band_img.shape
             pad_h, pad_w = max(0, 12 - h), max(0, 12 - w)
             band_img = np.pad(band_img, ((0, pad_h), (0, pad_w)), mode='constant', constant_values=0)
-            if band == "SR_B4": raw_b4 = band_img.copy()
-            if band == "SR_B5": raw_b5 = band_img.copy()
+
+            # Keep raw B4 and B5 for NDVI computation
+            if band == "SR_B4":
+                raw_b4 = band_img.copy()
+            if band == "SR_B5":
+                raw_b5 = band_img.copy()
+
+            # Normalize each band
             mean, std = np.mean(band_img), np.std(band_img)
             band_img = (band_img - mean) / std if std > 0 else np.zeros_like(band_img)
             img_stack.append(band_img)
 
     if len(img_stack) != len(target_bands):
         raise ValueError("Missing one or more Landsat bands.")
+
+    # Stack 5 normalized bands
     img = np.stack(img_stack, axis=-1)
+
+    # Compute NDVI
     ndvi = (raw_b5 - raw_b4) / (raw_b5 + raw_b4 + 1e-6)
     ndvi_mean = float(np.nanmean(ndvi))
     return img, ndvi_mean
+
 
 def compute_sentinel_features(sentinel_data):
     """Compute VV_mean, VH_mean, VH_VV_ratio, and transformed ratio."""
@@ -253,13 +404,15 @@ def compute_sentinel_features(sentinel_data):
 
     pt = PowerTransformer(method="yeo-johnson", standardize=False)
     VH_VV_ratio_trans2 = float(pt.fit_transform([[VH_VV_ratio]])[0][0])
+
     return VV_mean, VH_mean, VH_VV_ratio, VH_VV_ratio_trans2
+
 
 # ======================================
 # --- Streamlit App ---
 # ======================================
 st.title("🌾 Hybrid CNN + LightGBM Crop Yield Prediction")
-st.write("Upload **Landsat** and **Sentinel** patches along with metadata to predict yield using your trained models.")
+st.write("Upload **Landsat** and **Sentinel** patches along with metadata to predict crop yield using your trained models.")
 
 # --- Model Uploaders ---
 st.sidebar.header("📦 Upload Models")
@@ -283,20 +436,29 @@ trans_to_har_days = st.number_input("Transplanting to Harvest Days", value=100.0
 # --- Model Loading ---
 # ======================================
 cnn_model, lgbm_model = None, None
-if cnn_model_file is not None:
-    cnn_model = tf.keras.models.load_model(cnn_model_file)
-    st.sidebar.success("✅ CNN model loaded")
 
+# Handle CNN model upload safely
+if cnn_model_file is not None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".h5") as tmp:
+        tmp.write(cnn_model_file.read())
+        tmp_path = tmp.name
+    cnn_model = tf.keras.models.load_model(tmp_path)
+    st.sidebar.success("✅ CNN model loaded successfully")
+
+# Handle LightGBM model upload safely
 if lgbm_model_file is not None:
-    lgbm_model = joblib.load(lgbm_model_file)
-    st.sidebar.success("✅ LightGBM model loaded")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as tmp:
+        tmp.write(lgbm_model_file.read())
+        tmp_path = tmp.name
+    lgbm_model = joblib.load(tmp_path)
+    st.sidebar.success("✅ LightGBM model loaded successfully")
 
 # ======================================
 # --- Run Prediction ---
 # ======================================
 if st.button("🔍 Run Prediction"):
     if not (landsat_file and sentinel_file and cnn_model and lgbm_model):
-        st.error("❌ Please upload both images and both models.")
+        st.error("❌ Please upload both images and both models before running prediction.")
         st.stop()
 
     # --- Load and preprocess Landsat ---
@@ -305,17 +467,17 @@ if st.button("🔍 Run Prediction"):
 
     # --- CNN Feature Extraction ---
     img_input = np.expand_dims(landsat_img, axis=0)  # shape (1, 12, 12, 5)
-    cnn_features = cnn_model.predict(img_input)
+    cnn_features = cnn_model.predict(img_input, verbose=0)
     cnn_features = cnn_features.flatten()  # 1D feature vector
 
     # --- Sentinel feature extraction ---
     with np.load(sentinel_file) as sdata:
         VV_mean, VH_mean, VH_VV_ratio, VH_VV_ratio_trans2 = compute_sentinel_features(sdata)
 
-    # --- Apply transformations ---
+    # --- Transformations ---
     sow_to_trans_log = np.log1p(sow_to_trans_days).astype(np.float64)
 
-    # --- Prepare final LightGBM input ---
+    # --- Prepare LightGBM input ---
     tabular_features = np.array([
         area, sow_mon, har_mon, sow_to_trans_log, trans_to_har_days,
         VV_mean, VH_mean, VH_VV_ratio, VH_VV_ratio_trans2, ndvi_val
@@ -325,10 +487,11 @@ if st.button("🔍 Run Prediction"):
 
     # --- Predict yield ---
     yield_pred_log = float(lgbm_model.predict(full_input)[0])
-    yield_pred = np.expm1(yield_pred_log)
+    yield_pred = np.expm1(yield_pred_log)  # inverse log1p
 
     # --- Display results ---
     st.success(f"**Predicted Yield:** {yield_pred:.2f} kg/ha 🌾")
+
     st.write("### 📊 Feature Summary")
     st.dataframe({
         "AREA": [area],
@@ -343,3 +506,6 @@ if st.button("🔍 Run Prediction"):
         "NDVI": [ndvi_val],
         "CNN_features_dim": [cnn_features.shape[0]]
     })
+
+    st.balloons()
+
