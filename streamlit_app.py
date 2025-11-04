@@ -61,3 +61,62 @@ if ssubmit:
     response=get_gemini_response(Input_prompt,image_data,input)
     st.subheader("Here's what you need to know:")
     st.write(response)
+
+
+# ======================================
+# --- AI Explanation (via Gemini API) ---
+# ======================================
+import google.generativeai as genai
+import os
+
+# 🔐 Set up Gemini API key securely from environment variable
+genai.configure(api_key=st.secrets.get("GEMINI_API_KEY", None) or os.getenv("GEMINI_API_KEY"))
+
+try:
+    model_explainer = genai.GenerativeModel("gemini-1.5-flash")
+
+    # Prepare AI prompt with context
+    ai_prompt = f"""
+    You are an expert agronomist and data scientist.
+    Based on the following crop and satellite analysis results, explain the findings
+    and provide recommendations to the farmer in clear and actionable terms.
+
+    ---
+    **Input Data Summary:**
+    - Area: {area:.2f} ha
+    - Sowing Month: {sow_mon}
+    - Harvest Month: {har_mon}
+    - Sowing → Transplant Days: {sow_to_trans_days}
+    - Transplant → Harvest Days: {trans_to_har_days}
+
+    **Computed Satellite Metrics:**
+    - NDVI: {ndvi_val:.3f}
+    - VV_mean: {VV_mean:.3f}
+    - VH_mean: {VH_mean:.3f}
+    - VH/VV ratio: {VH_VV_ratio:.3f}
+    - Power-transformed ratio: {VH_VV_ratio_trans2:.3f}
+
+    **Predicted Yield:**
+    - {yield_pred:.2f} kg/ha
+
+    ---
+    Now generate a well-structured explanation that includes:
+    1. A friendly greeting and brief summary of the crop health.
+    2. NDVI-based interpretation (vegetation vigor and greenness).
+    3. Radar reflectance interpretation (moisture, canopy density).
+    4. Possible agronomic insights (irrigation, nutrient, or timing suggestions).
+    5. Overall yield assessment and actionable recommendations.
+    6. A short motivational closing note for the farmer.
+    """
+
+    # Call Gemini API
+    with st.spinner("🧠 Generating expert interpretation using Gemini..."):
+        ai_response = model_explainer.generate_content(ai_prompt)
+
+    st.subheader("🌿 AI-Powered Agronomic Advisory")
+    st.write(ai_response.text)
+
+except Exception as e:
+    st.warning("⚠️ AI advisory unavailable. Please check your Gemini API key or network connection.")
+    st.write(e)
+
