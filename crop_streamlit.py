@@ -474,10 +474,24 @@ if st.button("🔍 Run Prediction"):
     with np.load(landsat_file) as ldata:
         landsat_img, ndvi_val = preprocess_landsat_image(ldata)
 
-    # --- CNN Feature Extraction ---
-    img_input = np.expand_dims(landsat_img, axis=0)  # shape (1, 12, 12, 5)
-    cnn_features = cnn_model.predict(img_input, verbose=0)
-    cnn_features = cnn_features.flatten()  # 1D feature vector
+    # # --- CNN Feature Extraction ---
+    # img_input = np.expand_dims(landsat_img, axis=0)  # shape (1, 12, 12, 5)
+    # cnn_features = cnn_model.predict(img_input, verbose=0)
+    # cnn_features = cnn_features.flatten()  # 1D feature vector
+
+    # --- CNN Feature Extraction using layer 21 (same as Kaggle setup) ---
+    img_input = np.expand_dims(landsat_img, axis=0)  # (1, 12, 12, 5)
+    
+    # Build feature extractor to match Kaggle setup
+    feature_extractor = tf.keras.Model(
+        inputs=cnn_model.input,
+        outputs=cnn_model.layers[21].output
+    )
+    
+    cnn_features = feature_extractor.predict(img_input, verbose=0)
+    cnn_features = cnn_features.flatten()  # should be length 128
+    st.write("📏 Extracted CNN feature vector shape:", cnn_features.shape)
+
 
     # --- Sentinel feature extraction ---
     with np.load(sentinel_file) as sdata:
