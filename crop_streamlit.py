@@ -125,82 +125,221 @@
 
 #         st.success(f"**Crop Type:** {label_map[class_label]}")
 #         st.info(f"**Predicted Yield:** {yield_pred:.2f} kg/ha")
+# ------------------------------------------------------------------------------------------------------------------------------------
+
+# import streamlit as st
+# import numpy as np
+
+# # --- Dummy model for frontend testing ---
+# class DummyModel:
+#     def predict(self, inputs):
+#         img_array, meta_array = inputs
+#         # Fake classification: always "Paddy" with 70% confidence
+#         class_pred = np.array([[0.3, 0.7]])
+#         # Fake regression: yield = area * 100 (mock formula)
+#         reg_pred = np.array([[meta_array[0][0] * 100]])
+#         return class_pred, reg_pred
+
+# # Swap with your real model later
+# # model = tf.keras.models.load_model("cropnet_model.h5")
+# model = DummyModel()
+
+# # --- Streamlit UI ---
+# st.title("🌾 Crop Classification & Yield Prediction")
+# st.write("Upload a Landsat patch (.npz) with 5 bands and enter metadata to classify crop type and predict yield.")
+
+# # --- File uploader ---
+# uploaded_file = st.file_uploader("Upload Landsat Patch (.npz)", type=["npz"])
+
+# # --- Metadata input ---
+# st.subheader("Metadata Inputs")
+
+# area = st.number_input("Area (ha)", value=1.0, format="%.2f", key="area_input")
+# sowing_month = st.number_input("Sowing Month (numeric/encoded)", value=100.0, key="sowing_month_input")
+# harvest_month = st.number_input("Harvest Month (numeric/encoded)", value=200.0, key="harvest_month_input")
+# sowing_to_transplanting_days = st.number_input(
+#     "Sowing to Transplanting Days (numeric/encoded)", value=200.0, key="sowing_to_transplanting_input"
+# )
+
+# if uploaded_file is not None:
+#     with np.load(uploaded_file) as data:
+#         # Load first array (usually stored as 'arr_0')
+#         img_array = data[list(data.keys())[0]]
+
+#     st.write("✅ Landsat patch loaded:", img_array.shape)
+
+#     # Normalize (Landsat reflectance often 0–10000)
+#     img_array = img_array.astype("float32")
+#     if img_array.max() > 1.0:
+#         img_array = img_array / 10000.0  
+
+#     # Ensure shape = (H, W, C)
+#     if img_array.ndim == 2:
+#         img_array = np.expand_dims(img_array, axis=-1)
+#     elif img_array.shape[0] < img_array.shape[-1]:
+#         img_array = np.transpose(img_array, (1, 2, 0))
+
+#     # --- Pseudo-RGB Preview (using SR_B4, SR_B5, SR_B6) ---
+#     if img_array.shape[-1] >= 3:
+#         pseudo_rgb = np.stack([
+#             img_array[:, :, 0],  # SR_B4 (Red)
+#             img_array[:, :, 1],  # SR_B5 (NIR)
+#             img_array[:, :, 2],  # SR_B6 (SWIR1)
+#         ], axis=-1)
+#         pseudo_rgb = (pseudo_rgb - pseudo_rgb.min()) / (pseudo_rgb.max() - pseudo_rgb.min() + 1e-6)
+#         st.subheader("Pseudo-RGB Preview (SR_B4, SR_B5, SR_B6)")
+#         st.image(pseudo_rgb, caption="Landsat Patch (Pseudo-RGB)", use_column_width=True)
+
+#     # Expand dims for model
+#     img_array_batch = np.expand_dims(img_array, axis=0)   # (1, H, W, 5)
+#     meta_array = np.array([[area, sowing, harvest]])
+
+#     # --- Prediction button ---
+#     if st.button("🔍 Run Prediction"):
+#         class_pred, reg_pred = model.predict([img_array_batch, meta_array])
+#         class_label = int(np.argmax(class_pred, axis=1)[0])
+#         yield_pred = float(reg_pred[0][0])
+
+#         # Map labels (example: 0=Non-paddy, 1=Paddy)
+#         label_map = {0: "Non-Paddy", 1: "Paddy"}
+
+#         st.success(f"**Crop Type:** {label_map[class_label]}")
+#         st.info(f"**Predicted Yield:** {yield_pred:.2f} kg/ha")
+
+
 
 import streamlit as st
 import numpy as np
+import joblib
+import tensorflow as tf
+from sklearn.preprocessing import PowerTransformer
 
-# --- Dummy model for frontend testing ---
-class DummyModel:
-    def predict(self, inputs):
-        img_array, meta_array = inputs
-        # Fake classification: always "Paddy" with 70% confidence
-        class_pred = np.array([[0.3, 0.7]])
-        # Fake regression: yield = area * 100 (mock formula)
-        reg_pred = np.array([[meta_array[0][0] * 100]])
-        return class_pred, reg_pred
+# ======================================
+# --- Utility functions ---
+# ======================================
+def preprocess_landsat_image(data, target_bands=['SR_B4', 'SR_B5', 'SR_B6', 'ST_B10', 'ST_TRAD']):
+    """Preprocess Landsat .npz image for CNN (normalize, pad, stack 5 bands)."""
+    img_stack = []
+    raw_b4, raw_b5 = None, None
+    for band in target_bands:
+        if band in data:
+            band_img = data[band].astype(np.float32)
+            h, w = band_img.shape
+            pad_h, pad_w = max(0, 12 - h), max(0, 12 - w)
+            band_img = np.pad(band_img, ((0, pad_h), (0, pad_w)), mode='constant', constant_values=0)
+            if band == "SR_B4": raw_b4 = band_img.copy()
+            if band == "SR_B5": raw_b5 = band_img.copy()
+            mean, std = np.mean(band_img), np.std(band_img)
+            band_img = (band_img - mean) / std if std > 0 else np.zeros_like(band_img)
+            img_stack.append(band_img)
 
-# Swap with your real model later
-# model = tf.keras.models.load_model("cropnet_model.h5")
-model = DummyModel()
+    if len(img_stack) != len(target_bands):
+        raise ValueError("Missing one or more Landsat bands.")
+    img = np.stack(img_stack, axis=-1)
+    ndvi = (raw_b5 - raw_b4) / (raw_b5 + raw_b4 + 1e-6)
+    ndvi_mean = float(np.nanmean(ndvi))
+    return img, ndvi_mean
 
-# --- Streamlit UI ---
-st.title("🌾 Crop Classification & Yield Prediction")
-st.write("Upload a Landsat patch (.npz) with 5 bands and enter metadata to classify crop type and predict yield.")
+def compute_sentinel_features(sentinel_data):
+    """Compute VV_mean, VH_mean, VH_VV_ratio, and transformed ratio."""
+    VV = sentinel_data.get("VV")
+    VH = sentinel_data.get("VH")
+    if VV is None or VH is None:
+        raise ValueError("VV/VH bands missing in Sentinel data.")
 
-# --- File uploader ---
-uploaded_file = st.file_uploader("Upload Landsat Patch (.npz)", type=["npz"])
+    VV_mean = float(np.nanmean(VV))
+    VH_mean = float(np.nanmean(VH))
+    VH_VV_ratio = float(np.nanmean(VH / (VV + 1e-6)))
 
-# --- Metadata input ---
-st.subheader("Metadata Inputs")
+    pt = PowerTransformer(method="yeo-johnson", standardize=False)
+    VH_VV_ratio_trans2 = float(pt.fit_transform([[VH_VV_ratio]])[0][0])
+    return VV_mean, VH_mean, VH_VV_ratio, VH_VV_ratio_trans2
 
-area = st.number_input("Area (ha)", value=1.0, format="%.2f", key="area_input")
-sowing_month = st.number_input("Sowing Month (numeric/encoded)", value=100.0, key="sowing_month_input")
-harvest_month = st.number_input("Harvest Month (numeric/encoded)", value=200.0, key="harvest_month_input")
-sowing_to_transplanting_days = st.number_input(
-    "Sowing to Transplanting Days (numeric/encoded)", value=200.0, key="sowing_to_transplanting_input"
-)
+# ======================================
+# --- Streamlit App ---
+# ======================================
+st.title("🌾 Hybrid CNN + LightGBM Crop Yield Prediction")
+st.write("Upload **Landsat** and **Sentinel** patches along with metadata to predict yield using your trained models.")
 
-if uploaded_file is not None:
-    with np.load(uploaded_file) as data:
-        # Load first array (usually stored as 'arr_0')
-        img_array = data[list(data.keys())[0]]
+# --- Model Uploaders ---
+st.sidebar.header("📦 Upload Models")
+cnn_model_file = st.sidebar.file_uploader("Upload CNN Model (.h5)", type=["h5"])
+lgbm_model_file = st.sidebar.file_uploader("Upload LightGBM Model (.pkl)", type=["pkl", "joblib"])
 
-    st.write("✅ Landsat patch loaded:", img_array.shape)
+# --- Input Uploads ---
+st.subheader("🌍 Upload Input Data")
+landsat_file = st.file_uploader("Upload Landsat Patch (.npz)", type=["npz"])
+sentinel_file = st.file_uploader("Upload Sentinel Patch (.npz)", type=["npz"])
 
-    # Normalize (Landsat reflectance often 0–10000)
-    img_array = img_array.astype("float32")
-    if img_array.max() > 1.0:
-        img_array = img_array / 10000.0  
+# --- Metadata Inputs ---
+st.subheader("📋 Metadata Inputs")
+area = st.number_input("Area (ha)", value=1.0, format="%.2f")
+sow_mon = st.number_input("Sowing Month (numeric/encoded)", value=6.0)
+har_mon = st.number_input("Harvest Month (numeric/encoded)", value=12.0)
+sow_to_trans_days = st.number_input("Sowing to Transplanting Days", value=25.0)
+trans_to_har_days = st.number_input("Transplanting to Harvest Days", value=100.0)
 
-    # Ensure shape = (H, W, C)
-    if img_array.ndim == 2:
-        img_array = np.expand_dims(img_array, axis=-1)
-    elif img_array.shape[0] < img_array.shape[-1]:
-        img_array = np.transpose(img_array, (1, 2, 0))
+# ======================================
+# --- Model Loading ---
+# ======================================
+cnn_model, lgbm_model = None, None
+if cnn_model_file is not None:
+    cnn_model = tf.keras.models.load_model(cnn_model_file)
+    st.sidebar.success("✅ CNN model loaded")
 
-    # --- Pseudo-RGB Preview (using SR_B4, SR_B5, SR_B6) ---
-    if img_array.shape[-1] >= 3:
-        pseudo_rgb = np.stack([
-            img_array[:, :, 0],  # SR_B4 (Red)
-            img_array[:, :, 1],  # SR_B5 (NIR)
-            img_array[:, :, 2],  # SR_B6 (SWIR1)
-        ], axis=-1)
-        pseudo_rgb = (pseudo_rgb - pseudo_rgb.min()) / (pseudo_rgb.max() - pseudo_rgb.min() + 1e-6)
-        st.subheader("Pseudo-RGB Preview (SR_B4, SR_B5, SR_B6)")
-        st.image(pseudo_rgb, caption="Landsat Patch (Pseudo-RGB)", use_column_width=True)
+if lgbm_model_file is not None:
+    lgbm_model = joblib.load(lgbm_model_file)
+    st.sidebar.success("✅ LightGBM model loaded")
 
-    # Expand dims for model
-    img_array_batch = np.expand_dims(img_array, axis=0)   # (1, H, W, 5)
-    meta_array = np.array([[area, sowing, harvest]])
+# ======================================
+# --- Run Prediction ---
+# ======================================
+if st.button("🔍 Run Prediction"):
+    if not (landsat_file and sentinel_file and cnn_model and lgbm_model):
+        st.error("❌ Please upload both images and both models.")
+        st.stop()
 
-    # --- Prediction button ---
-    if st.button("🔍 Run Prediction"):
-        class_pred, reg_pred = model.predict([img_array_batch, meta_array])
-        class_label = int(np.argmax(class_pred, axis=1)[0])
-        yield_pred = float(reg_pred[0][0])
+    # --- Load and preprocess Landsat ---
+    with np.load(landsat_file) as ldata:
+        landsat_img, ndvi_val = preprocess_landsat_image(ldata)
 
-        # Map labels (example: 0=Non-paddy, 1=Paddy)
-        label_map = {0: "Non-Paddy", 1: "Paddy"}
+    # --- CNN Feature Extraction ---
+    img_input = np.expand_dims(landsat_img, axis=0)  # shape (1, 12, 12, 5)
+    cnn_features = cnn_model.predict(img_input)
+    cnn_features = cnn_features.flatten()  # 1D feature vector
 
-        st.success(f"**Crop Type:** {label_map[class_label]}")
-        st.info(f"**Predicted Yield:** {yield_pred:.2f} kg/ha")
+    # --- Sentinel feature extraction ---
+    with np.load(sentinel_file) as sdata:
+        VV_mean, VH_mean, VH_VV_ratio, VH_VV_ratio_trans2 = compute_sentinel_features(sdata)
+
+    # --- Apply transformations ---
+    sow_to_trans_log = np.log1p(sow_to_trans_days).astype(np.float64)
+
+    # --- Prepare final LightGBM input ---
+    tabular_features = np.array([
+        area, sow_mon, har_mon, sow_to_trans_log, trans_to_har_days,
+        VV_mean, VH_mean, VH_VV_ratio, VH_VV_ratio_trans2, ndvi_val
+    ])
+    full_input = np.concatenate([tabular_features, cnn_features])
+    full_input = full_input.reshape(1, -1)
+
+    # --- Predict yield ---
+    yield_pred_log = float(lgbm_model.predict(full_input)[0])
+    yield_pred = np.expm1(yield_pred_log)
+
+    # --- Display results ---
+    st.success(f"**Predicted Yield:** {yield_pred:.2f} kg/ha 🌾")
+    st.write("### 📊 Feature Summary")
+    st.dataframe({
+        "AREA": [area],
+        "sow_mon": [sow_mon],
+        "har_mon": [har_mon],
+        "sow_to_trans_days (log1p)": [sow_to_trans_log],
+        "trans_to_har_days": [trans_to_har_days],
+        "VV_mean": [VV_mean],
+        "VH_mean": [VH_mean],
+        "VH_VV_ratio": [VH_VV_ratio],
+        "VH_VV_ratio_trans2": [VH_VV_ratio_trans2],
+        "NDVI": [ndvi_val],
+        "CNN_features_dim": [cnn_features.shape[0]]
+    })
