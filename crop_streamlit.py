@@ -437,13 +437,22 @@ trans_to_har_days = st.number_input("Transplanting to Harvest Days", value=100.0
 # ======================================
 cnn_model, lgbm_model = None, None
 
+# # Handle CNN model upload safely
+# if cnn_model_file is not None:
+#     with tempfile.NamedTemporaryFile(delete=False, suffix=".h5") as tmp:
+#         tmp.write(cnn_model_file.read())
+#         tmp_path = tmp.name
+#     cnn_model = tf.keras.models.load_model(tmp_path)
+#     st.sidebar.success("✅ CNN model loaded successfully")
 # Handle CNN model upload safely
 if cnn_model_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".h5") as tmp:
         tmp.write(cnn_model_file.read())
         tmp_path = tmp.name
-    cnn_model = tf.keras.models.load_model(tmp_path)
-    st.sidebar.success("✅ CNN model loaded successfully")
+    # Load without compiling (fixes ValueError for unknown loss/layer)
+    cnn_model = tf.keras.models.load_model(tmp_path, compile=False)
+    st.sidebar.success("✅ CNN model loaded successfully (compile=False)")
+
 
 # Handle LightGBM model upload safely
 if lgbm_model_file is not None:
