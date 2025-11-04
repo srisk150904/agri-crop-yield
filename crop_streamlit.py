@@ -494,9 +494,25 @@ if st.button("🔍 Run Prediction"):
     full_input = np.concatenate([tabular_features, cnn_features])
     full_input = full_input.reshape(1, -1)
 
+    # # --- Predict yield ---
+    # yield_pred_log = float(lgbm_model.predict(full_input)[0])
+    # yield_pred = np.expm1(yield_pred_log)  # inverse log1p
+
+    # --- Safety check before prediction ---
+    if hasattr(lgbm_model, 'n_features_in_') and full_input.shape[1] != lgbm_model.n_features_in_:
+        st.error(f"❌ Feature size mismatch: LightGBM model expects {lgbm_model.n_features_in_} features but received {full_input.shape[1]}.")
+        st.info("Please ensure your CNN feature extractor is the same one used during training.")
+        st.stop()
+    
+    # --- Debug info (optional but helpful) ---
+    st.write("📏 LightGBM model expects features:", getattr(lgbm_model, 'n_features_in_', 'unknown'))
+    st.write("📏 App is sending features:", full_input.shape[1])
+    st.write("📏 CNN feature vector length:", cnn_features.shape[0])
+    
     # --- Predict yield ---
     yield_pred_log = float(lgbm_model.predict(full_input)[0])
-    yield_pred = np.expm1(yield_pred_log)  # inverse log1p
+    yield_pred = np.expm1(yield_pred_log)
+
 
     # --- Display results ---
     st.success(f"**Predicted Yield:** {yield_pred:.2f} kg/ha 🌾")
