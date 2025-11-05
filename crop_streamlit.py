@@ -653,27 +653,55 @@ if "yield_pred" in locals():
     yield_pct_of_expected = (yield_pred / expected_yield_per_ha * 100) if expected_yield_per_ha > 0 else 0
     
     # --- 📊 Yield and Economic Summary ---
+    # --- 📊 Yield and Economic Summary ---
     st.subheader("📈 Yield and Economic Analysis")
     
-    st.write(f"**Predicted yield:** {yield_pred:.2f} kg/ha ({yield_pct_of_expected:.1f}% of expected)")
-    st.write(f"**Total area:** {area:.2f} ha")
-    st.write(f"**Predicted total yield:** {predicted_yield_total_kg:,.1f} kg")
-    st.write(f"**Market price used:** ₹{paddy_price_avg:.2f}/kg")
+    # Helper function to highlight text
+    def highlight(text, color):
+        return f"<span style='background-color:{color}; padding:2px 6px; border-radius:4px;'>{text}</span>"
     
-    st.write(f"**Predicted total revenue:** ₹{predicted_revenue_total_rs:,.0f}")
-    st.write(f"**Total investment cost:** ₹{total_investment_rs:,.0f}")
+    # Prepare highlighted key values
+    yield_pct_html = highlight(f"{yield_pct_of_expected:.1f}%", "#FFD54F")  # soft yellow
+    profit_pct_html = highlight(f"{profit_margin_pct:.1f}%", "#AED581")     # light green
+    price_html = highlight(f"₹{paddy_price_avg:.2f}/kg", "#81C784")         # medium green
     
-    # Profitability insights
+    # Display main info
+    st.markdown(f"""
+    **Predicted yield:** {yield_pred:.2f} kg/ha ({yield_pct_html} of expected)  
+    **Total area:** {area:.2f} ha  
+    **Predicted total yield:** {predicted_yield_total_kg:,.1f} kg  
+    **Market price used:** {price_html}  
+    **Predicted total revenue:** ₹{predicted_revenue_total_rs:,.0f}  
+    **Total investment cost:** ₹{total_investment_rs:,.0f}  
+    """, unsafe_allow_html=True)
+    
+    # --- Profitability insights ---
     if profit_margin_pct < 0:
-        st.error(f"**Loss:** ₹{abs(profit_or_loss_rs):,.0f} ({profit_margin_pct:.1f}% below break-even)")
+        st.markdown(
+            f"❌ **Loss:** ₹{abs(profit_or_loss_rs):,.0f} "
+            f"(<b style='color:#E53935'>{profit_pct_html}</b> below break-even)",
+            unsafe_allow_html=True,
+        )
     elif profit_margin_pct < 20:
-        st.warning(f"**Low Profit:** ₹{profit_or_loss_rs:,.0f} ({profit_margin_pct:.1f}% margin)")
+        st.markdown(
+            f"⚠️ **Low Profit:** ₹{profit_or_loss_rs:,.0f} "
+            f"(<b style='color:#FB8C00'>{profit_pct_html}</b> margin)",
+            unsafe_allow_html=True,
+        )
     elif profit_margin_pct < 50:
-        st.info(f"**Moderate Profit:** ₹{profit_or_loss_rs:,.0f} ({profit_margin_pct:.1f}% margin)")
+        st.markdown(
+            f"ℹ️ **Moderate Profit:** ₹{profit_or_loss_rs:,.0f} "
+            f"(<b style='color:#FDD835'>{profit_pct_html}</b> margin)",
+            unsafe_allow_html=True,
+        )
     else:
-        st.success(f"**High Profit:** ₹{profit_or_loss_rs:,.0f} ({profit_margin_pct:.1f}% margin)")
+        st.markdown(
+            f"✅ **High Profit:** ₹{profit_or_loss_rs:,.0f} "
+            f"(<b style='color:#43A047'>{profit_pct_html}</b> margin)",
+            unsafe_allow_html=True,
+        )
     
-    # --- Yield Rating (for interpretation clarity) ---
+    # --- Yield Rating ---
     if yield_pct_of_expected < 50:
         yield_text = "Poor — yield far below potential; likely stress or resource limitation."
     elif yield_pct_of_expected < 80:
@@ -683,13 +711,28 @@ if "yield_pred" in locals():
     else:
         yield_text = "Excellent — favorable conditions and efficient management."
     
-    st.markdown(f"**Yield Assessment:** {yield_text} (Predicted: {yield_pred:.2f} kg/ha)")
+    st.markdown(
+        f"**Yield Assessment:** {yield_text} "
+        f"(Predicted: <b style='color:#64B5F6'>{yield_pred:.2f} kg/ha</b>)",
+        unsafe_allow_html=True
+    )
     
     # --- Economic Assessment Summary ---
     if profit_margin_pct < 0:
-        st.markdown(f"**Economic Assessment:** Loss of ₹{abs(profit_or_loss_rs):,.0f} ({profit_margin_pct:.1f}%) on total area.")
+        st.markdown(
+            f"**Economic Assessment:** "
+            f"Loss of ₹{abs(profit_or_loss_rs):,.0f} "
+            f"(<b style='color:#E53935'>{profit_margin_pct:.1f}%</b>) on total area.",
+            unsafe_allow_html=True,
+        )
     else:
-        st.markdown(f"**Economic Assessment:** Profit of ₹{profit_or_loss_rs:,.0f} ({profit_margin_pct:.1f}%) on total area.")
+        st.markdown(
+            f"**Economic Assessment:** "
+            f"Profit of ₹{profit_or_loss_rs:,.0f} "
+            f"(<b style='color:#43A047'>{profit_margin_pct:.1f}%</b>) on total area.",
+            unsafe_allow_html=True,
+        )
+
 
     
     st.subheader("🧠 Model Interpretation & Insights")
