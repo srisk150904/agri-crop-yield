@@ -85,14 +85,14 @@ col1, col2 = st.columns(2)
 
 with col1:
     landsat_file = st.file_uploader("Upload Landsat Patch (.npz)", type=["npz"])
-    area = st.number_input("Area (ha)", value=1.0, format="%.2f")
+    area = st.number_input("Area (acres)", value=1.0, format="%.2f")
     sow_mon = st.number_input("Sowing Month (numeric/encoded)", value=6.0)
     sow_to_trans_days = st.number_input("Sowing to Transplanting Days", value=25.0)
     expected_yield_per_ha = st.number_input(
-        "Expected yield (kg/ha) under good conditions for this crop",
+        "Expected yield (kg/acre) under good conditions for this crop",
         value=1500.0,
         format="%.1f",
-        help="Typical benchmark for paddy can range from 300–4000 kg/ha. Adjust to your local expectation."
+        help="Typical benchmark for paddy can range from 300–4000 kg/acre. Adjust to your local expectation."
     )
 
 with col2:
@@ -205,7 +205,7 @@ if st.button("🔍 Run Prediction"):
 
 
     # --- Display results ---
-    st.success(f"**Predicted Yield:** {yield_pred:.2f} kg/ha 🌾")
+    st.success(f"**Predicted Yield:** {yield_pred:.2f} kg/acre 🌾")
 
     st.write("### 📊 Feature Summary")
     st.dataframe({
@@ -261,8 +261,8 @@ if "yield_pred" in locals() and "ndvi_val" in locals():
 
         st.markdown("### 📊 Yield and Economic Analysis")
         st.markdown(f"""
-        **Predicted yield:** {color_text(f'{yield_pred:.2f} kg/ha', ACCENT_COLOR)} ({yield_pct_html} of expected)  
-        **Total area:** {color_text(f'{area:.2f} ha', ACCENT_COLOR)}  
+        **Predicted yield:** {color_text(f'{yield_pred:.2f} kg/acre', ACCENT_COLOR)} ({yield_pct_html} of expected)  
+        **Total area:** {color_text(f'{area:.2f} acres', ACCENT_COLOR)}  
         **Predicted total yield:** {color_text(f'{predicted_yield_total_kg:,.1f} kg', ACCENT_COLOR)}  
         **Market price used:** {price_html}  
         **Predicted total revenue:** {color_text(f'₹{predicted_revenue_total_rs:,.0f}', HIGHLIGHT_COLOR)}  
@@ -291,7 +291,7 @@ if "yield_pred" in locals() and "ndvi_val" in locals():
 
         st.markdown(
             f"**Yield Assessment:** {yield_text} "
-            f"(Predicted: {color_text(f'{yield_pred:.2f} kg/ha', HIGHLIGHT_COLOR)})",
+            f"(Predicted: {color_text(f'{yield_pred:.2f} kg/acre', HIGHLIGHT_COLOR)})",
             unsafe_allow_html=True
         )
 
@@ -365,7 +365,7 @@ if "yield_pred" in locals() and "ndvi_val" in locals():
 
         ---
         **Input Data Summary:**
-        - Area: {area:.2f} ha
+        - Area: {area:.2f} acres
         - Sowing Month: {sow_mon}
         - Harvest Month: {har_mon}
         - Sowing → Transplant Days: {sow_to_trans_days}
@@ -379,7 +379,7 @@ if "yield_pred" in locals() and "ndvi_val" in locals():
         - Power-transformed ratio: {VH_VV_ratio_trans2:.3f}
 
         **Predicted Yield:**
-        - {yield_pred:.2f} kg/ha
+        - {yield_pred:.2f} kg/acre
 
         ---
         Generate a concise, well-structured explanation that includes:
