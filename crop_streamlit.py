@@ -90,18 +90,18 @@ with col1:
     sow_to_trans_days = st.number_input("Sowing to Transplanting Days", value=25.0)
     expected_yield_per_ha = st.number_input(
         "Expected yield (kg/ha) under good conditions for this crop",
-        value=4500.0,
+        value=1500.0,
         format="%.1f",
-        help="Typical benchmark for paddy can range from 3000–6000 kg/ha. Adjust to your local expectation."
+        help="Typical benchmark for paddy can range from 300–4000 kg/ha. Adjust to your local expectation."
     )
 
 with col2:
     sentinel_file = st.file_uploader("Upload Sentinel Patch (.npz)", type=["npz"])
     har_mon = st.number_input("Harvest Month (numeric/encoded)", value=12.0)
     trans_to_har_days = st.number_input("Transplanting to Harvest Days", value=100.0)
-    investment_cost_per_ha = st.number_input(
-        "Expected investment cost per hectare (₹)",
-        value=45000.0,
+    investment_cost = st.number_input(
+        "Expected investment cost (₹)",
+        value=35000.0,
         format="%.1f",
         help="Include seeds, fertilizer, labour, irrigation, etc."
     )
@@ -243,7 +243,7 @@ if "yield_pred" in locals() and "ndvi_val" in locals():
         # Economic calculations
         predicted_yield_total_kg = yield_pred * area
         predicted_revenue_total_rs = predicted_yield_total_kg * paddy_price_avg
-        total_investment_rs = investment_cost_per_ha * area
+        total_investment_rs = investment_cost
         profit_or_loss_rs = predicted_revenue_total_rs - total_investment_rs
         profit_margin_pct = (profit_or_loss_rs / total_investment_rs * 100) if total_investment_rs > 0 else 0
         yield_pct_of_expected = (yield_pred / expected_yield_per_ha * 100) if expected_yield_per_ha > 0 else 0
