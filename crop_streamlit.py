@@ -431,6 +431,18 @@ sow_mon = st.number_input("Sowing Month (numeric/encoded)", value=6.0)
 har_mon = st.number_input("Harvest Month (numeric/encoded)", value=12.0)
 sow_to_trans_days = st.number_input("Sowing to Transplanting Days", value=25.0)
 trans_to_har_days = st.number_input("Transplanting to Harvest Days", value=100.0)
+expected_yield_per_ha = st.number_input(
+    "Expected yield (kg/ha) under good conditions for this crop",
+    value=4500.0, format="%.1f",
+    help="Typical benchmark for paddy can range from 3000–6000 kg/ha. Adjust to your local expectation."
+)
+
+investment_cost_per_ha = st.number_input(
+    "Expected investment cost per hectare (₹)",
+    value=45000.0, format="%.1f",
+    help="Include seeds, fertilizer, labour, irrigation, etc."
+)
+
 
 # ======================================
 # --- Model Loading ---
@@ -552,18 +564,124 @@ if st.button("🔍 Run Prediction"):
 # --- Interpretability & Explanation ---
 # ======================================
 if "yield_pred" in locals():
-    st.subheader("🧠 Model Interpretation & Insights")
     
-    # --- 1️⃣ Yield Interpretation ---
-    if yield_pred < 2500:
-        yield_text = "below average yield. This may indicate suboptimal crop health, limited soil moisture, or stress during the growing season."
-    elif 2500 <= yield_pred < 5000:
-        yield_text = "moderate yield, typical for average crop conditions. The crop appears healthy but may not have reached full potential."
+    # Typical paddy price range
+    import datetime
+    import google.generativeai as genai
+    import re
+    
+    # --- Step 1: Get current year using Python ---
+    current_year = datetime.datetime.now().year
+    
+    # --- Step 2: Configure Gemini (secure API key or fallback to hardcoded for now) ---
+    api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY") or "AIzaSyBBKgwflgq7lEWn130W8BE_Qask6SYHHVo"
+    genai.configure(api_key=api_key)
+    
+    # --- Step 3: Initialize Gemini model ---
+    try:
+        model_price = genai.GenerativeModel("gemini-1.5-flash-latest")
+    except Exception:
+        st.warning("⚠️ gemini-1.5-flash-latest not available. Falling back to gemini-1.5-pro-latest.")
+        model_price = genai.GenerativeModel("gemini-1.5-pro-latest")
+    
+    # --- Step 4: Prepare pricing dataset prompt ---
+    prompt_price = f"""
+    Based on the following Tamil Nadu paddy procurement data, return the effective procurement price
+    (including state incentive) for the {current_year}-{current_year+1} Kharif Marketing Season
+    for **Common Paddy**, expressed as a single numeric value with the unit ₹/kg and nothing else.
+    """
+    
+    # --- Step 5: Query Gemini (Simplified for direct value response) ---
+    try:
+        with st.spinner("📊 Fetching Tamil Nadu paddy price for the current season..."):
+            price_response = model_price.generate_content(prompt_price)
+            response_text = price_response.text.strip()
+    
+            # The response is usually like "₹25.00" — so we directly clean it up
+            response_text = response_text.replace("₹", "").replace("/kg", "").replace("per kg", "").strip()
+    
+            try:
+                paddy_price_avg = float(response_text)
+            except ValueError:
+                paddy_price_avg = 25.0  # fallback if parsing fails
+    
+        st.success(f"🌾 Using {current_year}-{current_year+1} KMS price: **₹{paddy_price_avg:.2f}/kg**")
+    
+    except Exception as e:
+        st.warning("⚠️ Could not fetch price from Gemini — using default ₹22.00/kg.")
+        st.caption(str(e))
+        paddy_price_avg = 25.0
+
+    
+    # # --- 1️⃣ Yield Interpretation ---
+    # if yield_pred < 2500:
+    #     yield_text = "below average yield. This may indicate suboptimal crop health, limited soil moisture, or stress during the growing season."
+    # elif 2500 <= yield_pred < 5000:
+    #     yield_text = "moderate yield, typical for average crop conditions. The crop appears healthy but may not have reached full potential."
+    # else:
+    #     yield_text = "high yield potential. Conditions appear favorable, with strong vegetation signals and consistent canopy growth."
+    
+    # st.markdown(f"**Yield Assessment:** The predicted yield of `{yield_pred:.2f} kg/ha` suggests {yield_text}")
+
+    # --- Economic analysis (scaled to total land area) ---
+    # --- Economic analysis (scaled to total land area) ---
+    # Convert predicted yield from kg/ha to total yield
+    predicted_yield_total_kg = yield_pred * area
+    
+    # Compute total revenue (₹)
+    predicted_revenue_total_rs = predicted_yield_total_kg * paddy_price_avg
+    
+    # Compute total investment (₹)
+    total_investment_rs = investment_cost_per_ha * area
+    
+    # Profit or loss for total area
+    profit_or_loss_rs = predicted_revenue_total_rs - total_investment_rs
+    profit_margin_pct = (profit_or_loss_rs / total_investment_rs * 100) if total_investment_rs > 0 else 0
+    
+    # Yield relative to expected (for rating purposes only)
+    yield_pct_of_expected = (yield_pred / expected_yield_per_ha * 100) if expected_yield_per_ha > 0 else 0
+    
+    # --- 📊 Yield and Economic Summary ---
+    st.subheader("📈 Yield and Economic Analysis")
+    
+    st.write(f"**Predicted yield:** {yield_pred:.2f} kg/ha ({yield_pct_of_expected:.1f}% of expected)")
+    st.write(f"**Total area:** {area:.2f} ha")
+    st.write(f"**Predicted total yield:** {predicted_yield_total_kg:,.1f} kg")
+    st.write(f"**Market price used:** ₹{paddy_price_avg:.2f}/kg")
+    
+    st.write(f"**Predicted total revenue:** ₹{predicted_revenue_total_rs:,.0f}")
+    st.write(f"**Total investment cost:** ₹{total_investment_rs:,.0f}")
+    
+    # Profitability insights
+    if profit_margin_pct < 0:
+        st.error(f"**Loss:** ₹{abs(profit_or_loss_rs):,.0f} ({profit_margin_pct:.1f}% below break-even)")
+    elif profit_margin_pct < 20:
+        st.warning(f"**Low Profit:** ₹{profit_or_loss_rs:,.0f} ({profit_margin_pct:.1f}% margin)")
+    elif profit_margin_pct < 50:
+        st.info(f"**Moderate Profit:** ₹{profit_or_loss_rs:,.0f} ({profit_margin_pct:.1f}% margin)")
     else:
-        yield_text = "high yield potential. Conditions appear favorable, with strong vegetation signals and consistent canopy growth."
+        st.success(f"**High Profit:** ₹{profit_or_loss_rs:,.0f} ({profit_margin_pct:.1f}% margin)")
     
-    st.markdown(f"**Yield Assessment:** The predicted yield of `{yield_pred:.2f} kg/ha` suggests {yield_text}")
+    # --- Yield Rating (for interpretation clarity) ---
+    if yield_pct_of_expected < 50:
+        yield_text = "Poor — yield far below potential; likely stress or resource limitation."
+    elif yield_pct_of_expected < 80:
+        yield_text = "Below average — moderate stress or management gaps."
+    elif yield_pct_of_expected <= 110:
+        yield_text = "Good — near expected performance."
+    else:
+        yield_text = "Excellent — favorable conditions and efficient management."
     
+    st.markdown(f"**Yield Assessment:** {yield_text} (Predicted: {yield_pred:.2f} kg/ha)")
+    
+    # --- Economic Assessment Summary ---
+    if profit_margin_pct < 0:
+        st.markdown(f"**Economic Assessment:** Loss of ₹{abs(profit_or_loss_rs):,.0f} ({profit_margin_pct:.1f}%) on total area.")
+    else:
+        st.markdown(f"**Economic Assessment:** Profit of ₹{profit_or_loss_rs:,.0f} ({profit_margin_pct:.1f}%) on total area.")
+
+    
+    st.subheader("🧠 Model Interpretation & Insights")
     # --- 2️⃣ NDVI Analysis ---
     if ndvi_val < 0.3:
         ndvi_text = "indicates sparse or stressed vegetation — possibly due to poor germination, drought, or nutrient stress."
