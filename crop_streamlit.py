@@ -561,290 +561,179 @@ if st.button("🔍 Run Prediction"):
     st.balloons()
 
 # ======================================
-# --- Interpretability & Explanation ---
-# ======================================
-if "yield_pred" in locals():
-    
-    # Typical paddy price range
-    import datetime
-    import google.generativeai as genai
-    import re
-    
-    # --- Step 1: Get current year using Python ---
-    # current_year = datetime.datetime.now().year
-    
-    # --- Step 2: Configure Gemini (secure API key or fallback to hardcoded for now) ---
-    # --- Secure Gemini API Key setup ---
-    # genai.configure(api_key="AIzaSyBBKgwflgq7lEWn130W8BE_Qask6SYHHVo")
-
-    # # ✅ Use a supported model
-    # try:
-    #     model_explainer = genai.GenerativeModel("gemini-2.0-flash")
-    # except Exception:
-    #     st.warning("⚠️ Unable to initialize Gemini model. Falling back to gemini-1.5-pro.")
-    #     try:
-    #         model_explainer = genai.GenerativeModel("gemini-1.5-pro")
-    #     except:
-    #         model_explainer = None
-    
-    # # --- Step 4: Prepare pricing dataset prompt ---
-    # prompt_price = f"""
-    # Based on the following Tamil Nadu paddy procurement data, return the effective procurement price
-    # (including state incentive) for the {current_year}-{current_year+1} Kharif Marketing Season
-    # for **Common Paddy**, expressed as a single numeric value with the unit ₹/kg and nothing else.
-    # """
-    
-    # # --- Step 5: Query Gemini (Simplified for direct value response) ---
-    # # --- Step 5: Query Gemini (Simplified for direct value response) ---
-    # try:
-    #     with st.spinner("📊 Fetching Tamil Nadu paddy price for the current season..."):
-    #         price_response = model_price.generate_content(prompt_price)
-    #         response_text = price_response.text.strip()
-    
-    #         # The response is usually like "₹25.00" — so clean it up
-    #         response_text = (
-    #             response_text.replace("₹", "")
-    #                          .replace("Rs", "")
-    #                          .replace("per kg", "")
-    #                          .replace("/kg", "")
-    #                          .strip()
-    #         )
-    
-    #         # Parse numeric safely
-    #         try:
-    #             paddy_price_avg = float(response_text)
-    #         except ValueError:
-    #             paddy_price_avg = 25.0  # fallback if Gemini returns anything unexpected
-    
-    #     st.success(f"🌾 Using {current_year}-{current_year+1} KMS price: **₹{paddy_price_avg:.2f}/kg**")
-    
-    # except Exception as e:
-    #     st.warning("⚠️ Could not fetch price from Gemini — using default ₹25.00/kg.")
-    #     st.caption(str(e))
-    #     paddy_price_avg = 25.0
-    paddy_price_avg = 25.0
-
-    # # --- 1️⃣ Yield Interpretation ---
-    # if yield_pred < 2500:
-    #     yield_text = "below average yield. This may indicate suboptimal crop health, limited soil moisture, or stress during the growing season."
-    # elif 2500 <= yield_pred < 5000:
-    #     yield_text = "moderate yield, typical for average crop conditions. The crop appears healthy but may not have reached full potential."
-    # else:
-    #     yield_text = "high yield potential. Conditions appear favorable, with strong vegetation signals and consistent canopy growth."
-    
-    # st.markdown(f"**Yield Assessment:** The predicted yield of `{yield_pred:.2f} kg/ha` suggests {yield_text}")
-
-    # --- Economic analysis (scaled to total land area) ---
-    # --- Economic analysis (scaled to total land area) ---
-    # Convert predicted yield from kg/ha to total yield
-    predicted_yield_total_kg = yield_pred * area
-    
-    # Compute total revenue (₹)
-    predicted_revenue_total_rs = predicted_yield_total_kg * paddy_price_avg
-    
-    # Compute total investment (₹)
-    total_investment_rs = investment_cost_per_ha * area
-    
-    # Profit or loss for total area
-    profit_or_loss_rs = predicted_revenue_total_rs - total_investment_rs
-    profit_margin_pct = (profit_or_loss_rs / total_investment_rs * 100) if total_investment_rs > 0 else 0
-    
-    # Yield relative to expected (for rating purposes only)
-    yield_pct_of_expected = (yield_pred / expected_yield_per_ha * 100) if expected_yield_per_ha > 0 else 0
-    
-    # --- 📊 Yield and Economic Summary ---
-    # --- 📊 Yield and Economic Summary ---
-    # --- 📊 Yield and Economic Summary ---
-    st.subheader("📈 Yield and Economic Analysis")
-    
-    # Helper for colored text (dark/light theme friendly)
-    def color_text(text, color="#4DD0E1"):  # default teal accent
-        return f"<b style='color:{color}'>{text}</b>"
-    
-    # Define color palette
-    ACCENT_COLOR = "#4DD0E1"   # Teal for general values
-    HIGHLIGHT_COLOR = "#66BB6A"  # Green for key/financial values
-    
-    # Format key numbers with subtle color
-    yield_pct_html = color_text(f"{yield_pct_of_expected:.1f}%", ACCENT_COLOR)
-    profit_pct_html = color_text(f"{profit_margin_pct:.1f}%", HIGHLIGHT_COLOR)
-    price_html = color_text(f"₹{paddy_price_avg:.2f}/kg", HIGHLIGHT_COLOR)
-    
-    # Display yield and basic stats
-    st.markdown(f"""
-    **Predicted yield:** {color_text(f'{yield_pred:.2f} kg/ha', ACCENT_COLOR)} ({yield_pct_html} of expected)  
-    **Total area:** {color_text(f'{area:.2f} ha', ACCENT_COLOR)}  
-    **Predicted total yield:** {color_text(f'{predicted_yield_total_kg:,.1f} kg', ACCENT_COLOR)}  
-    **Market price used:** {price_html}  
-    **Predicted total revenue:** {color_text(f'₹{predicted_revenue_total_rs:,.0f}', HIGHLIGHT_COLOR)}  
-    **Total investment cost:** {color_text(f'₹{total_investment_rs:,.0f}', ACCENT_COLOR)}  
-    """, unsafe_allow_html=True)
-    
-    # --- Profitability Insights ---
-    if profit_margin_pct < 0:
-        st.markdown(
-            f"❌ **Loss:** {color_text(f'₹{abs(profit_or_loss_rs):,.0f}', HIGHLIGHT_COLOR)} "
-            f"({profit_pct_html} below break-even)",
-            unsafe_allow_html=True,
-        )
-    elif profit_margin_pct < 20:
-        st.markdown(
-            f"⚠️ **Low Profit:** {color_text(f'₹{profit_or_loss_rs:,.0f}', HIGHLIGHT_COLOR)} "
-            f"({profit_pct_html} margin)",
-            unsafe_allow_html=True,
-        )
-    elif profit_margin_pct < 50:
-        st.markdown(
-            f"ℹ️ **Moderate Profit:** {color_text(f'₹{profit_or_loss_rs:,.0f}', HIGHLIGHT_COLOR)} "
-            f"({profit_pct_html} margin)",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            f"✅ **High Profit:** {color_text(f'₹{profit_or_loss_rs:,.0f}', HIGHLIGHT_COLOR)} "
-            f"({profit_pct_html} margin)",
-            unsafe_allow_html=True,
-        )
-    
-    # --- Yield Rating ---
-    if yield_pct_of_expected < 50:
-        yield_text = "Poor — yield far below potential; likely stress or resource limitation."
-    elif yield_pct_of_expected < 80:
-        yield_text = "Below average — moderate stress or management gaps."
-    elif yield_pct_of_expected <= 110:
-        yield_text = "Good — near expected performance."
-    else:
-        yield_text = "Excellent — favorable conditions and efficient management."
-    
-    st.markdown(
-        f"**Yield Assessment:** {yield_text} "
-        f"(Predicted: {color_text(f'{yield_pred:.2f} kg/ha', HIGHLIGHT_COLOR)})",
-        unsafe_allow_html=True
-    )
-    
-    # --- Economic Assessment Summary ---
-    if profit_margin_pct < 0:
-        st.markdown(
-            f"**Economic Assessment:** Loss of {color_text(f'₹{abs(profit_or_loss_rs):,.0f}', HIGHLIGHT_COLOR)} "
-            f"({profit_pct_html}) on total area.",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            f"**Economic Assessment:** Profit of {color_text(f'₹{profit_or_loss_rs:,.0f}', HIGHLIGHT_COLOR)} "
-            f"({profit_pct_html}) on total area.",
-            unsafe_allow_html=True,
-        )
-
-
-
-    
-    st.subheader("🧠 Model Interpretation & Insights")
-    # --- 2️⃣ NDVI Analysis ---
-    if ndvi_val < 0.3:
-        ndvi_text = "indicates sparse or stressed vegetation — possibly due to poor germination, drought, or nutrient stress."
-    elif 0.3 <= ndvi_val < 0.6:
-        ndvi_text = "represents moderate vegetation density, typical of crops in mid-growth or under mild stress."
-    else:
-        ndvi_text = "shows dense vegetation, healthy chlorophyll activity, and optimal photosynthetic performance."
-    
-    st.markdown(f"**NDVI Insight:** NDVI = `{ndvi_val:.3f}` → {ndvi_text}")
-    
-    # --- 3️⃣ Radar Reflectance Analysis (Sentinel VV/VH) ---
-    if VH_VV_ratio < 0.4:
-        radar_text = "suggests a well-developed canopy with minimal soil exposure, indicating good vegetation cover."
-    elif 0.4 <= VH_VV_ratio < 0.8:
-        radar_text = "indicates moderate backscatter, consistent with balanced crop density and moisture."
-    else:
-        radar_text = "shows high backscatter, which could mean surface roughness, high moisture, or sparse vegetation."
-    
-    st.markdown(f"**Radar Backscatter Insight:** VH/VV ratio = `{VH_VV_ratio:.3f}` → {radar_text}")
-    
-    # --- 4️⃣ Temporal Metadata Analysis ---
-    month_names = {
-        1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
-        7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
-    }
-    sow_m = month_names.get(int(sow_mon), f"Month {sow_mon}")
-    har_m = month_names.get(int(har_mon), f"Month {har_mon}")
-    st.markdown(f"**Temporal Insight:** Crop sown in **{sow_m}** and harvested around **{har_m}**. "
-                f"Total growth duration: ~`{sow_to_trans_days + trans_to_har_days}` days, typical for seasonal crops like paddy or maize.")
-    
-    # --- 5️⃣ Overall Summary ---
-    st.info(f"""
-    **Summary Interpretation**
-    - Predicted yield: `{yield_pred:.2f} kg/ha` → {yield_text}
-    - NDVI: `{ndvi_val:.3f}` → {ndvi_text}
-    - Radar VH/VV ratio: `{VH_VV_ratio:.3f}` → {radar_text}
-    - Sowing–harvest period: {sow_m} to {har_m} (~{sow_to_trans_days + trans_to_har_days} days)
-    """)
-
-# ======================================
-# --- AI Explanation (via Gemini API) ---
+# --- Results & AI Advisory Tabs ---
 # ======================================
 if "yield_pred" in locals() and "ndvi_val" in locals():
-    import google.generativeai as genai
-    import os
+    # Create two tabs for cleaner layout
+    tab1, tab2 = st.tabs(["📈 Yield & Economic Summary", "🌿 AI-Powered Advisory"])
 
-    # --- Secure Gemini API Key setup ---
-    genai.configure(api_key="AIzaSyBBKgwflgq7lEWn130W8BE_Qask6SYHHVo")
+    # ---------------------------------------------------
+    # TAB 1 — YIELD AND ECONOMIC INTERPRETATION
+    # ---------------------------------------------------
+    with tab1:
+        import datetime
+        import re
 
-    # ✅ Use a supported model
-    try:
-        model_explainer = genai.GenerativeModel("gemini-2.0-flash")
-    except Exception:
-        st.warning("⚠️ Unable to initialize Gemini model. Falling back to gemini-1.5-pro.")
+        paddy_price_avg = 25.0  # current average market rate in ₹/kg
+
+        # Economic calculations
+        predicted_yield_total_kg = yield_pred * area
+        predicted_revenue_total_rs = predicted_yield_total_kg * paddy_price_avg
+        total_investment_rs = investment_cost_per_ha * area
+        profit_or_loss_rs = predicted_revenue_total_rs - total_investment_rs
+        profit_margin_pct = (profit_or_loss_rs / total_investment_rs * 100) if total_investment_rs > 0 else 0
+        yield_pct_of_expected = (yield_pred / expected_yield_per_ha * 100) if expected_yield_per_ha > 0 else 0
+
+        # --- Styling helper ---
+        def color_text(text, color="#4DD0E1"):  # teal accent
+            return f"<b style='color:{color}'>{text}</b>"
+
+        ACCENT_COLOR = "#4DD0E1"    # general metric color
+        HIGHLIGHT_COLOR = "#66BB6A" # for key ₹ values or %s
+
+        yield_pct_html = color_text(f"{yield_pct_of_expected:.1f}%", ACCENT_COLOR)
+        profit_pct_html = color_text(f"{profit_margin_pct:.1f}%", HIGHLIGHT_COLOR)
+        price_html = color_text(f"₹{paddy_price_avg:.2f}/kg", HIGHLIGHT_COLOR)
+
+        st.markdown("### 📊 Yield and Economic Analysis")
+        st.markdown(f"""
+        **Predicted yield:** {color_text(f'{yield_pred:.2f} kg/ha', ACCENT_COLOR)} ({yield_pct_html} of expected)  
+        **Total area:** {color_text(f'{area:.2f} ha', ACCENT_COLOR)}  
+        **Predicted total yield:** {color_text(f'{predicted_yield_total_kg:,.1f} kg', ACCENT_COLOR)}  
+        **Market price used:** {price_html}  
+        **Predicted total revenue:** {color_text(f'₹{predicted_revenue_total_rs:,.0f}', HIGHLIGHT_COLOR)}  
+        **Total investment cost:** {color_text(f'₹{total_investment_rs:,.0f}', ACCENT_COLOR)}  
+        """, unsafe_allow_html=True)
+
+        # Profitability summary
+        if profit_margin_pct < 0:
+            st.markdown(f"❌ **Loss:** {color_text(f'₹{abs(profit_or_loss_rs):,.0f}', HIGHLIGHT_COLOR)} ({profit_pct_html} below break-even)", unsafe_allow_html=True)
+        elif profit_margin_pct < 20:
+            st.markdown(f"⚠️ **Low Profit:** {color_text(f'₹{profit_or_loss_rs:,.0f}', HIGHLIGHT_COLOR)} ({profit_pct_html} margin)", unsafe_allow_html=True)
+        elif profit_margin_pct < 50:
+            st.markdown(f"ℹ️ **Moderate Profit:** {color_text(f'₹{profit_or_loss_rs:,.0f}', HIGHLIGHT_COLOR)} ({profit_pct_html} margin)", unsafe_allow_html=True)
+        else:
+            st.markdown(f"✅ **High Profit:** {color_text(f'₹{profit_or_loss_rs:,.0f}', HIGHLIGHT_COLOR)} ({profit_pct_html} margin)", unsafe_allow_html=True)
+
+        # Yield rating
+        if yield_pct_of_expected < 50:
+            yield_text = "Poor — yield far below potential; likely stress or resource limitation."
+        elif yield_pct_of_expected < 80:
+            yield_text = "Below average — moderate stress or management gaps."
+        elif yield_pct_of_expected <= 110:
+            yield_text = "Good — near expected performance."
+        else:
+            yield_text = "Excellent — favorable conditions and efficient management."
+
+        st.markdown(
+            f"**Yield Assessment:** {yield_text} "
+            f"(Predicted: {color_text(f'{yield_pred:.2f} kg/ha', HIGHLIGHT_COLOR)})",
+            unsafe_allow_html=True
+        )
+
+        # Economic summary
+        if profit_margin_pct < 0:
+            st.markdown(
+                f"**Economic Assessment:** Loss of {color_text(f'₹{abs(profit_or_loss_rs):,.0f}', HIGHLIGHT_COLOR)} "
+                f"({profit_pct_html}) on total area.",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"**Economic Assessment:** Profit of {color_text(f'₹{profit_or_loss_rs:,.0f}', HIGHLIGHT_COLOR)} "
+                f"({profit_pct_html}) on total area.",
+                unsafe_allow_html=True,
+            )
+
+        # NDVI + Radar insight
+        st.subheader("🧠 Model Interpretation & Insights")
+
+        if ndvi_val < 0.3:
+            ndvi_text = "indicates sparse or stressed vegetation — possibly due to poor germination, drought, or nutrient stress."
+        elif 0.3 <= ndvi_val < 0.6:
+            ndvi_text = "represents moderate vegetation density, typical of crops in mid-growth or under mild stress."
+        else:
+            ndvi_text = "shows dense vegetation, healthy chlorophyll activity, and optimal photosynthetic performance."
+        st.markdown(f"**NDVI Insight:** NDVI = `{ndvi_val:.3f}` → {ndvi_text}")
+
+        if VH_VV_ratio < 0.4:
+            radar_text = "suggests a well-developed canopy with minimal soil exposure, indicating good vegetation cover."
+        elif 0.4 <= VH_VV_ratio < 0.8:
+            radar_text = "indicates moderate backscatter, consistent with balanced crop density and moisture."
+        else:
+            radar_text = "shows high backscatter, which could mean surface roughness, high moisture, or sparse vegetation."
+        st.markdown(f"**Radar Backscatter Insight:** VH/VV ratio = `{VH_VV_ratio:.3f}` → {radar_text}")
+
+        # Temporal summary
+        month_names = {1:"January",2:"February",3:"March",4:"April",5:"May",6:"June",7:"July",8:"August",9:"September",10:"October",11:"November",12:"December"}
+        sow_m = month_names.get(int(sow_mon), f"Month {sow_mon}")
+        har_m = month_names.get(int(har_mon), f"Month {har_mon}")
+        st.markdown(f"**Temporal Insight:** Crop sown in **{sow_m}** and harvested around **{har_m}**. Total growth duration: ~`{sow_to_trans_days + trans_to_har_days}` days.")
+
+        # Summary
+        st.info(f"""
+        **Summary Interpretation**
+        - Predicted yield: `{yield_pred:.2f} kg/ha` → {yield_text}
+        - NDVI: `{ndvi_val:.3f}` → {ndvi_text}
+        - Radar VH/VV ratio: `{VH_VV_ratio:.3f}` → {radar_text}
+        - Sowing–harvest period: {sow_m} to {har_m} (~{sow_to_trans_days + trans_to_har_days} days)
+        """)
+
+    # ---------------------------------------------------
+    # TAB 2 — AI-GENERATED AGRONOMIC ADVISORY
+    # ---------------------------------------------------
+    with tab2:
+        import google.generativeai as genai
+        import os
+
+        genai.configure(api_key="AIzaSyBBKgwflgq7lEWn130W8BE_Qask6SYHHVo")
+
         try:
+            model_explainer = genai.GenerativeModel("gemini-2.0-flash")
+        except Exception:
+            st.warning("⚠️ Unable to load Gemini-2.0-flash. Using gemini-1.5-pro instead.")
             model_explainer = genai.GenerativeModel("gemini-1.5-pro")
-        except:
-            model_explainer = None
 
-    # --- Prepare context-rich AI prompt ---
-    ai_prompt = f"""
-    You are an expert agronomist and data scientist.
-    Based on the following crop and satellite analysis results, explain the findings
-    and provide clear, actionable recommendations to the farmer.
+        ai_prompt = f"""
+        You are an expert agronomist and data scientist.
+        Based on the following crop and satellite analysis results, explain the findings
+        and provide clear, actionable recommendations to the farmer.
 
-    ---
-    **Input Data Summary:**
-    - Area: {area:.2f} ha
-    - Sowing Month: {sow_mon}
-    - Harvest Month: {har_mon}
-    - Sowing → Transplant Days: {sow_to_trans_days}
-    - Transplant → Harvest Days: {trans_to_har_days}
+        ---
+        **Input Data Summary:**
+        - Area: {area:.2f} ha
+        - Sowing Month: {sow_mon}
+        - Harvest Month: {har_mon}
+        - Sowing → Transplant Days: {sow_to_trans_days}
+        - Transplant → Harvest Days: {trans_to_har_days}
 
-    **Computed Satellite Metrics:**
-    - NDVI: {ndvi_val:.3f}
-    - VV_mean: {VV_mean:.3f}
-    - VH_mean: {VH_mean:.3f}
-    - VH/VV ratio: {VH_VV_ratio:.3f}
-    - Power-transformed ratio: {VH_VV_ratio_trans2:.3f}
+        **Computed Satellite Metrics:**
+        - NDVI: {ndvi_val:.3f}
+        - VV_mean: {VV_mean:.3f}
+        - VH_mean: {VH_mean:.3f}
+        - VH/VV ratio: {VH_VV_ratio:.3f}
+        - Power-transformed ratio: {VH_VV_ratio_trans2:.3f}
 
-    **Predicted Yield:**
-    - {yield_pred:.2f} kg/ha
+        **Predicted Yield:**
+        - {yield_pred:.2f} kg/ha
 
-    ---
-    Generate a clear, well-structured explanation that includes:
-    1️⃣ A short friendly greeting.  
-    2️⃣ NDVI-based interpretation (crop vigor and greenness).  
-    3️⃣ Radar-based interpretation (moisture, canopy structure, surface texture).  
-    4️⃣ Agronomic recommendations (irrigation, nutrient, timing).  
-    5️⃣ Final yield assessment and motivational note.  
-    Avoid technical jargon and explain in a farmer-friendly manner.
-    """
+        ---
+        Generate a concise, well-structured explanation that includes:
+        - NDVI interpretation (crop greenness)
+        - Radar interpretation (moisture & canopy)
+        - Agronomic advice (irrigation, nutrients, timing)
+        - Yield evaluation & motivation for farmer
+        Avoid jargon and keep it farmer-friendly.
+        """
 
-    if model_explainer:
-        try:
-            with st.spinner("🧠 Generating expert interpretation using Gemini..."):
-                ai_response = model_explainer.generate_content(ai_prompt)
-            st.subheader("🌿 AI-Powered Agronomic Advisory")
-            st.write(ai_response.text)
-        except Exception as e:
-            st.warning("⚠️ AI advisory unavailable. The Gemini model could not generate a response.")
-            st.caption(str(e))
-    else:
-        st.info("💡 AI explanation skipped — no compatible Gemini model was initialized.")
-
-else:
-    st.info("👆 Run the prediction first to generate the AI advisory.")
-
+        if model_explainer:
+            try:
+                with st.spinner("🧠 Generating expert interpretation using Gemini..."):
+                    ai_response = model_explainer.generate_content(ai_prompt)
+                st.subheader("🌿 AI-Powered Agronomic Advisory")
+                st.write(ai_response.text)
+            except Exception as e:
+                st.warning("⚠️ Gemini model could not generate a response.")
+                st.caption(str(e))
+        else:
+            st.info("💡 AI advisory unavailable — Gemini model not initialized.")
