@@ -451,7 +451,7 @@ if cnn_model_file is not None:
         tmp_path = tmp.name
     # Load without compiling (fixes ValueError for unknown loss/layer)
     cnn_model = tf.keras.models.load_model(tmp_path, compile=False)
-    st.sidebar.success("✅ CNN model loaded successfully (compile=False)")
+    st.sidebar.success("✅ CNN model loaded successfully")
 
 
 # Handle LightGBM model upload safely
@@ -610,10 +610,17 @@ import google.generativeai as genai
 import os
 
 # --- Secure Gemini API Key setup ---
-genai.configure(api_key="AIzaSyBBKgwflgq7lEWn130W8BE_Qask6SYHHVo")  # same working key from your invoice app
+genai.configure(api_key="AIzaSyBBKgwflgq7lEWn130W8BE_Qask6SYHHVo")
 
-# --- Load Gemini model (same as working one) ---
-model_explainer = genai.GenerativeModel('gemini-1.5-flash')
+# ✅ Use a supported model
+try:
+    model_explainer = genai.GenerativeModel("gemini-2.0-flash")
+except Exception as e:
+    st.warning("⚠️ Unable to initialize Gemini model. Falling back to gemini-1.5-pro.")
+    try:
+        model_explainer = genai.GenerativeModel("gemini-1.5-pro")
+    except:
+        model_explainer = None
 
 # --- Prepare context-rich AI prompt ---
 ai_prompt = f"""
@@ -649,15 +656,15 @@ Generate a clear, well-structured explanation that includes:
 Avoid technical jargon and explain in a farmer-friendly manner.
 """
 
-try:
-    with st.spinner("🧠 Generating expert interpretation using Gemini..."):
-        # Use same pattern as your working app
-        ai_response = model_explainer.generate_content(ai_prompt)
-    
-    st.subheader("🌿 AI-Powered Agronomic Advisory")
-    st.write(ai_response.text)
-
-except Exception as e:
-    st.warning("⚠️ Gemini advisory unavailable. Please check your network connection or key validity.")
-    st.write(e)
-
+# ✅ Place this block here
+if model_explainer:
+    try:
+        with st.spinner("🧠 Generating expert interpretation using Gemini..."):
+            ai_response = model_explainer.generate_content(ai_prompt)
+        st.subheader("🌿 AI-Powered Agronomic Advisory")
+        st.write(ai_response.text)
+    except Exception as e:
+        st.warning("⚠️ AI advisory unavailable. The Gemini model could not generate a response.")
+        st.caption(str(e))
+else:
+    st.info("💡 AI explanation skipped — no compatible Gemini model was initialized.")
